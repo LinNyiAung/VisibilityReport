@@ -145,7 +145,7 @@ def build_periods(dates: List[datetime]):
     daily = []
     for d in sorted(dates, reverse=True):
         daily.append({
-            "label": d.strftime("%m/%d/%y"),
+            "label": d.strftime("%d/%m/%Y"),  # Changed from %m/%d/%y to %d/%m/%Y
             "date": d.strftime("%Y-%m-%d"),
         })
 
@@ -162,7 +162,8 @@ def build_periods(dates: List[datetime]):
     weekly = []
     for end_str, (week_start, week_end) in sorted(weekly_buckets.items(), reverse=True):
         weekly.append({
-            "label": f"{week_start.strftime('%m/%d/%y')} - {week_end.strftime('%m/%d/%y')}",
+            # Changed from %m/%d/%y to %d/%m/%Y
+            "label": f"{week_start.strftime('%d/%m/%Y')} - {week_end.strftime('%d/%m/%Y')}",
             "end_date": end_str,
         })
 
