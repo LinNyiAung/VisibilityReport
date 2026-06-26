@@ -329,16 +329,17 @@ def get_visibility_reports(
             for row in cursor.fetchall():
                 customer_map[row.CardCode] = row.CardName
 
-        # Fetch Route/Salesman Details
+        # Fetch Route/Salesman Details including the new 'Active' column
         if unique_route_codes:
             placeholders = ','.join(['?'] * len(unique_route_codes))
-            route_query = f"SELECT RouteCode, SupCode, SupName, SPName FROM Master_Route_SaleMan WHERE RouteCode IN ({placeholders})"
+            route_query = f"SELECT RouteCode, SupCode, SupName, SPName, Active FROM Master_Route_SaleMan WHERE RouteCode IN ({placeholders})"
             cursor.execute(route_query, list(unique_route_codes))
             for row in cursor.fetchall():
                 route_map[row.RouteCode] = {
                     "SupCode": row.SupCode,
                     "SupName": row.SupName,
-                    "SPName": row.SPName
+                    "SPName": row.SPName,
+                    "Active": row.Active
                 }
     finally:
         cursor.close()
@@ -361,7 +362,8 @@ def get_visibility_reports(
                 "SuperName": route_info.get("SupName", "Unknown"),
                 "CusCode": cus_code,
                 "CusName": customer_map.get(cus_code, "Unknown"),
-                "DisplayImages": images
+                "DisplayImages": images,
+                "Active": route_info.get("Active", "N") # Added Active status
             })
 
         reports.append({

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 
 const API_BASE = 'http://logcalculator.pahtama.com:4000';
 
-// Added the PROGRAM_MAP provided in your request
 const PROGRAM_MAP = {
   "51": "Hair Care-Bottle",
   "52": "Oral Care",
@@ -47,8 +46,10 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // NEW: State for the selected program filter
   const [selectedProgram, setSelectedProgram] = useState('All');
+  
+  // NEW: State to toggle between Detail and Summary report types
+  const [reportType, setReportType] = useState('Detail'); // 'Detail' | 'Summary'
 
   // 1. Load the available Daily / Weekly / Monthly lists on mount
   useEffect(() => {
@@ -140,7 +141,6 @@ function App() {
 
   const activeList = periods[activeTab] || [];
 
-  // NEW: Filter the reports based on the selected program
   const filteredReports = reports.filter((report) => {
     if (selectedProgram === 'All') return true;
     return report.ProgramCode === selectedProgram;
@@ -198,22 +198,40 @@ function App() {
               Showing {activeTabLabel(selectedPeriod.type)} report: {selectedPeriod.label}
             </h3>
             
-            {/* NEW: Program Filter Dropdown */}
             {!loading && !error && reports.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <label style={{ fontWeight: 'bold', color: '#444' }}>Filter by Program:</label>
-                <select
-                  value={selectedProgram}
-                  onChange={(e) => setSelectedProgram(e.target.value)}
-                  style={styles.selectInput}
-                >
-                  <option value="All">All Programs</option>
-                  {Object.entries(PROGRAM_MAP).map(([code, name]) => (
-                    <option key={code} value={code}>
-                      {name} ({code})
-                    </option>
-                  ))}
-                </select>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                
+                {/* NEW: Report Type Toggle */}
+                <div style={styles.toggleGroup}>
+                  <button 
+                    style={reportType === 'Detail' ? styles.toggleActive : styles.toggleInactive}
+                    onClick={() => setReportType('Detail')}
+                  >
+                    Detail
+                  </button>
+                  <button 
+                    style={reportType === 'Summary' ? styles.toggleActive : styles.toggleInactive}
+                    onClick={() => setReportType('Summary')}
+                  >
+                    Summary
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <label style={{ fontWeight: 'bold', color: '#444' }}>Filter by Program:</label>
+                  <select
+                    value={selectedProgram}
+                    onChange={(e) => setSelectedProgram(e.target.value)}
+                    style={styles.selectInput}
+                  >
+                    <option value="All">All Programs</option>
+                    {Object.entries(PROGRAM_MAP).map(([code, name]) => (
+                      <option key={code} value={code}>
+                        {name} ({code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
           </div>
@@ -226,16 +244,15 @@ function App() {
           <h2>No image folder matches found for {selectedPeriod.label}.</h2>
         )}
         
-        {/* Render fallback message if filter hides all results */}
         {!loading && reports.length > 0 && filteredReports.length === 0 && (
           <h3 style={{ color: '#666' }}>No data found for the selected program in this period.</h3>
         )}
 
-        {/* Report Render Section (Using filteredReports) */}
+        {/* Report Render Section */}
         {!loading && filteredReports.map((report) => (
           <div key={report.ProgramCode} style={{ marginBottom: '50px' }}>
             <h1 style={styles.title}>
-              {report.ProgramName} Visibility Program Detail - {report.TimeFrame}
+              {report.ProgramName} Visibility Program {reportType} - {report.TimeFrame}
             </h1>
 
             <div style={styles.tableWrapper}>
@@ -248,7 +265,7 @@ function App() {
                   <col style={{ width: '10%' }} />
                   <col style={{ width: '8%' }} />
                   <col style={{ width: '10%' }} />
-                  <col style={{ width: '38%' }} />
+                  <col style={{ width: reportType === 'Detail' ? '38%' : '15%' }} />
                 </colgroup>
                 <thead>
                   <tr style={{ backgroundColor: '#f2f2f2' }}>
@@ -272,20 +289,31 @@ function App() {
                       <td style={styles.thtd}>{row.SuperName}</td>
                       <td style={styles.thtd}>{row.CusCode}</td>
                       <td style={styles.thtd}>{row.CusName}</td>
+                      
+                      {/* CONDITIONAL RENDER: Images (Detail) vs Text Status (Summary) */}
                       <td style={styles.thtd}>
-                        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                          {row.DisplayImages.map((imgUrl, imgIndex) => (
-                            <img
-                              key={imgIndex}
-                              src={imgUrl}
-                              alt="Merchandise"
-                              height="130"
-                              width="130"
-                              style={{ border: '1px solid #ddd', borderRadius: '4px' }}
-                            />
-                          ))}
-                        </div>
+                        {reportType === 'Detail' ? (
+                          <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                            {row.DisplayImages.map((imgUrl, imgIndex) => (
+                              <img
+                                key={imgIndex}
+                                src={imgUrl}
+                                alt="Merchandise"
+                                height="130"
+                                width="130"
+                                style={{ border: '1px solid #ddd', borderRadius: '4px' }}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ textAlign: 'center' }}>
+                            <div>{report.ProgramName} visibility</div>
+                            <hr style={{ borderTop: '1px solid #ddd', margin: '8px 0' }}/>
+                            <div style={{ fontWeight: 'bold' }}>{row.Active}</div>
+                          </div>
+                        )}
                       </td>
+
                     </tr>
                   ))}
                 </tbody>
@@ -404,7 +432,6 @@ const styles = {
     wordWrap: 'break-word',
     overflowWrap: 'break-word',
   },
-  // NEW: Input styles for the filter dropdown
   selectInput: {
     padding: '6px 12px',
     fontSize: '14px',
@@ -413,6 +440,27 @@ const styles = {
     backgroundColor: '#fff',
     cursor: 'pointer',
     minWidth: '200px'
+  },
+  toggleGroup: {
+    display: 'flex',
+    borderRadius: '4px',
+    overflow: 'hidden',
+    border: '1px solid #ced4da'
+  },
+  toggleActive: {
+    backgroundColor: '#0d6efd',
+    color: '#fff',
+    border: 'none',
+    padding: '6px 12px',
+    cursor: 'pointer',
+    fontWeight: 'bold'
+  },
+  toggleInactive: {
+    backgroundColor: '#f8f9fa',
+    color: '#495057',
+    border: 'none',
+    padding: '6px 12px',
+    cursor: 'pointer'
   }
 };
 
