@@ -1,6 +1,39 @@
 import React, { useState, useEffect } from 'react';
 
-const API_BASE = 'http://localhost:4000';
+const API_BASE = 'http://logcalculator.pahtama.com:4000';
+
+// Added the PROGRAM_MAP provided in your request
+const PROGRAM_MAP = {
+  "51": "Hair Care-Bottle",
+  "52": "Oral Care",
+  "53": "Fabric Care",
+  "54": "Blade & razor",
+  "55": "Home Care",
+  "57": "Medical Nutrition",
+  "58": "Pediatric Nutrition",
+  "59": "Nutrition Supplement",
+  "60": "Beverage",
+  "62": "Cake & Pie",
+  "63": "Instant Noodle Any",
+  "64": "Cereal",
+  "65": "Potato Chip",
+  "66": "Biscuit & Cookies",
+  "67": "Sugar Supplement",
+  "68": "Cooking Oil",
+  "69": "Snack",
+  "70": "Cake Rusk",
+  "71": "Ready to Eat (Balachaung)",
+  "72": "Coffee",
+  "74": "Condiment",
+  "75": "Process Food",
+  "77": "Pickled Tea and Related Item",
+  "86": "Preserve Fruit",
+  "87": "Butter & Spreads",
+  "88": "Ice Cream",
+  "89": "May Yee Mon Visibility Program",
+  "90": "Ovaltine Visibility Program",
+  "91": "MYM Congee visibility program"
+};
 
 function App() {
   const [periods, setPeriods] = useState({ daily: [], weekly: [], monthly: [] });
@@ -13,6 +46,9 @@ function App() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // NEW: State for the selected program filter
+  const [selectedProgram, setSelectedProgram] = useState('All');
 
   // 1. Load the available Daily / Weekly / Monthly lists on mount
   useEffect(() => {
@@ -49,6 +85,7 @@ function App() {
 
     setLoading(true);
     setError(null);
+    setSelectedProgram('All'); // Reset filter when changing periods
 
     const params = new URLSearchParams();
     params.set('period_type', selectedPeriod.type);
@@ -103,6 +140,12 @@ function App() {
 
   const activeList = periods[activeTab] || [];
 
+  // NEW: Filter the reports based on the selected program
+  const filteredReports = reports.filter((report) => {
+    if (selectedProgram === 'All') return true;
+    return report.ProgramCode === selectedProgram;
+  });
+
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif', display: 'flex', gap: '16px' }}>
 
@@ -150,9 +193,30 @@ function App() {
         )}
 
         {selectedPeriod && (
-          <h3 style={{ color: '#444', marginTop: 0 }}>
-            Showing {activeTabLabel(selectedPeriod.type)} report: {selectedPeriod.label}
-          </h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h3 style={{ color: '#444', margin: 0 }}>
+              Showing {activeTabLabel(selectedPeriod.type)} report: {selectedPeriod.label}
+            </h3>
+            
+            {/* NEW: Program Filter Dropdown */}
+            {!loading && !error && reports.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <label style={{ fontWeight: 'bold', color: '#444' }}>Filter by Program:</label>
+                <select
+                  value={selectedProgram}
+                  onChange={(e) => setSelectedProgram(e.target.value)}
+                  style={styles.selectInput}
+                >
+                  <option value="All">All Programs</option>
+                  {Object.entries(PROGRAM_MAP).map(([code, name]) => (
+                    <option key={code} value={code}>
+                      {name} ({code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
         )}
 
         {loading && <h2 style={{ color: '#666' }}>Generating Reports... Processing image paths and database queries...</h2>}
@@ -161,9 +225,14 @@ function App() {
         {!loading && !error && selectedPeriod && reports.length === 0 && (
           <h2>No image folder matches found for {selectedPeriod.label}.</h2>
         )}
+        
+        {/* Render fallback message if filter hides all results */}
+        {!loading && reports.length > 0 && filteredReports.length === 0 && (
+          <h3 style={{ color: '#666' }}>No data found for the selected program in this period.</h3>
+        )}
 
-        {/* Report Render Section */}
-        {!loading && reports.map((report) => (
+        {/* Report Render Section (Using filteredReports) */}
+        {!loading && filteredReports.map((report) => (
           <div key={report.ProgramCode} style={{ marginBottom: '50px' }}>
             <h1 style={styles.title}>
               {report.ProgramName} Visibility Program Detail - {report.TimeFrame}
@@ -334,6 +403,16 @@ const styles = {
     fontSize: '13px',
     wordWrap: 'break-word',
     overflowWrap: 'break-word',
+  },
+  // NEW: Input styles for the filter dropdown
+  selectInput: {
+    padding: '6px 12px',
+    fontSize: '14px',
+    borderRadius: '4px',
+    border: '1px solid #ced4da',
+    backgroundColor: '#fff',
+    cursor: 'pointer',
+    minWidth: '200px'
   }
 };
 
