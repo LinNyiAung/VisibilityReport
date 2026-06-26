@@ -39,7 +39,7 @@ function App() {
   const [periodsLoading, setPeriodsLoading] = useState(true);
   const [periodsError, setPeriodsError] = useState(null);
 
-  const [activeTab, setActiveTab] = useState('weekly'); // 'daily' | 'weekly' | 'monthly'
+  const [activeTab, setActiveTab] = useState('daily'); // 'daily' | 'weekly' | 'monthly'
   const [selectedPeriod, setSelectedPeriod] = useState(null); // { type, ...params, label }
 
   const [reports, setReports] = useState([]);
@@ -48,7 +48,7 @@ function App() {
 
   const [selectedProgram, setSelectedProgram] = useState('All');
   
-  // NEW: State to toggle between Detail and Summary report types
+  // State to toggle between Detail and Summary report types
   const [reportType, setReportType] = useState('Detail'); // 'Detail' | 'Summary'
 
   // 1. Load the available Daily / Weekly / Monthly lists on mount
@@ -68,10 +68,10 @@ function App() {
         setPeriods(loadedPeriods);
         setPeriodsLoading(false);
 
-        // Default to the most recent weekly period, if one exists
-        if (loadedPeriods.weekly.length > 0) {
-          const mostRecent = loadedPeriods.weekly[0];
-          setSelectedPeriod({ type: 'weekly', end_date: mostRecent.end_date, label: mostRecent.label });
+        // Default to the latest available daily period
+        if (loadedPeriods.daily.length > 0) {
+          const mostRecent = loadedPeriods.daily[0];
+          setSelectedPeriod({ type: 'daily', date: mostRecent.date, label: mostRecent.label });
         }
       })
       .catch((err) => {
@@ -201,7 +201,7 @@ function App() {
             {!loading && !error && reports.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
                 
-                {/* NEW: Report Type Toggle */}
+                {/* Report Type Toggle */}
                 <div style={styles.toggleGroup}>
                   <button 
                     style={reportType === 'Detail' ? styles.toggleActive : styles.toggleInactive}
