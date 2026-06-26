@@ -1,159 +1,315 @@
 import React, { useState, useEffect } from 'react';
 
+const API_BASE = 'http://localhost:8000';
+
 function App() {
+  const [periods, setPeriods] = useState({ daily: [], weekly: [], monthly: [] });
+  const [periodsLoading, setPeriodsLoading] = useState(true);
+  const [periodsError, setPeriodsError] = useState(null);
+
+  const [activeTab, setActiveTab] = useState('weekly'); // 'daily' | 'weekly' | 'monthly'
+  const [selectedPeriod, setSelectedPeriod] = useState(null); // { type, ...params, label }
+
   const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  
-  // Default to empty string so the backend auto-calculates the current Friday on initial load
-  const [selectedFriday, setSelectedFriday] = useState('');
 
+  // 1. Load the available Daily / Weekly / Monthly lists on mount
   useEffect(() => {
-    setLoading(true);
-    // Append the end_date query parameter to the API request
-    const url = selectedFriday 
-      ? `http://localhost:8000/api/reports?end_date=${selectedFriday}`
-      : 'http://localhost:8000/api/reports';
-
-    fetch(url)
-      .then(response => {
-        if (!response.ok) throw new Error('Failed to retrieve reports for this timeframe.');
+    setPeriodsLoading(true);
+    fetch(`${API_BASE}/api/periods`)
+      .then((response) => {
+        if (!response.ok) throw new Error('Failed to load available report periods.');
         return response.json();
       })
-      .then(data => {
+      .then((data) => {
+        const loadedPeriods = {
+          daily: data.daily || [],
+          weekly: data.weekly || [],
+          monthly: data.monthly || [],
+        };
+        setPeriods(loadedPeriods);
+        setPeriodsLoading(false);
+
+        // Default to the most recent weekly period, if one exists
+        if (loadedPeriods.weekly.length > 0) {
+          const mostRecent = loadedPeriods.weekly[0];
+          setSelectedPeriod({ type: 'weekly', end_date: mostRecent.end_date, label: mostRecent.label });
+        }
+      })
+      .catch((err) => {
+        setPeriodsError(err.message);
+        setPeriodsLoading(false);
+      });
+  }, []);
+
+  // 2. Whenever the selected period changes, fetch its report
+  useEffect(() => {
+    if (!selectedPeriod) return;
+
+    setLoading(true);
+    setError(null);
+
+    const params = new URLSearchParams();
+    params.set('period_type', selectedPeriod.type);
+    if (selectedPeriod.type === 'daily') {
+      params.set('date', selectedPeriod.date);
+    } else if (selectedPeriod.type === 'weekly') {
+      params.set('end_date', selectedPeriod.end_date);
+    } else if (selectedPeriod.type === 'monthly') {
+      params.set('year', selectedPeriod.year);
+      params.set('month', selectedPeriod.month);
+    }
+
+    fetch(`${API_BASE}/api/reports?${params.toString()}`)
+      .then((response) => {
+        if (!response.ok) throw new Error('Failed to retrieve reports for this period.');
+        return response.json();
+      })
+      .then((data) => {
+        if (data.error) throw new Error(data.error);
         setReports(data.reports || []);
         setLoading(false);
       })
-      .catch(err => {
+      .catch((err) => {
         setError(err.message);
         setLoading(false);
       });
-  }, [selectedFriday]); // Re-run effect whenever selectedFriday changes
+  }, [selectedPeriod]);
 
-  const handleDateChange = (e) => {
-    const dateStr = e.target.value; // Format: YYYY-MM-DD
-    if (!dateStr) return;
-
-    const dateObj = new Date(dateStr);
-    // day index: 0 = Sunday, 5 = Friday
-    if (dateObj.getDay() !== 5) {
-      alert("Please select a Friday. Reports run on a weekly timeframe ending on Fridays.");
-      return;
+  const handleSelectPeriod = (type, item) => {
+    if (type === 'daily') {
+      setSelectedPeriod({ type, date: item.date, label: item.label });
+    } else if (type === 'weekly') {
+      setSelectedPeriod({ type, end_date: item.end_date, label: item.label });
+    } else if (type === 'monthly') {
+      setSelectedPeriod({ type, year: item.year, month: item.month, label: item.label });
     }
-    
-    setSelectedFriday(dateStr);
   };
 
+  const isSelected = (type, item) => {
+    if (!selectedPeriod || selectedPeriod.type !== type) return false;
+    if (type === 'daily') return selectedPeriod.date === item.date;
+    if (type === 'weekly') return selectedPeriod.end_date === item.end_date;
+    if (type === 'monthly') return selectedPeriod.year === item.year && selectedPeriod.month === item.month;
+    return false;
+  };
+
+  const tabs = [
+    { key: 'daily', label: 'Daily' },
+    { key: 'weekly', label: 'Weekly' },
+    { key: 'monthly', label: 'Monthly' },
+  ];
+
+  const activeList = periods[activeTab] || [];
+
   return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
-      
-      {/* Control Panel Section */}
-      <div style={styles.controlPanel}>
-        <label htmlFor="friday-picker" style={{ marginRight: '10px', fontWeight: 'bold' }}>
-          Select History Week (Ends on Friday): 
-        </label>
-        <input 
-          type="date" 
-          id="friday-picker" 
-          value={selectedFriday} 
-          onChange={handleDateChange}
-          style={styles.dateInput}
-        />
-        {selectedFriday && (
-          <button 
-            onClick={() => setSelectedFriday('')} 
-            style={styles.resetButton}
-          >
-            Clear Filter (Show Current Week)
-          </button>
+    <div style={{ padding: '20px', fontFamily: 'sans-serif', display: 'flex', gap: '16px' }}>
+
+      {/* Sidebar: Daily / Weekly / Monthly period browser */}
+      <div style={styles.sidebar}>
+        <div style={styles.tabRow}>
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              style={activeTab === tab.key ? styles.tabButtonActive : styles.tabButton}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {periodsLoading && <p style={{ color: '#666', padding: '10px' }}>Loading periods...</p>}
+        {periodsError && <p style={{ color: 'red', padding: '10px' }}>Error: {periodsError}</p>}
+
+        {!periodsLoading && !periodsError && activeList.length === 0 && (
+          <p style={{ color: '#666', padding: '10px' }}>No {activeTab} periods available.</p>
+        )}
+
+        {!periodsLoading && !periodsError && (
+          <ul style={styles.periodList}>
+            {activeList.map((item, idx) => (
+              <li key={idx}>
+                <button
+                  onClick={() => handleSelectPeriod(activeTab, item)}
+                  style={isSelected(activeTab, item) ? styles.periodItemActive : styles.periodItem}
+                >
+                  {item.label}
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 
-      {loading && <h2 style={{ color: '#666' }}>Generating Reports... Processing image paths and database queries...</h2>}
-      {error && <h2 style={{ color: 'red' }}>Error: {error}</h2>}
-      
-      {!loading && reports.length === 0 && (
-        <h2>No image folder matches found for the week ending {selectedFriday || 'this Friday'}.</h2>
-      )}
+      {/* Main content: selected report */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {!selectedPeriod && (
+          <h2 style={{ color: '#666' }}>Select a Daily, Weekly, or Monthly period from the list to view its report.</h2>
+        )}
 
-      {/* Report Render Section */}
-      {!loading && reports.map((report) => (
-        <div key={report.ProgramCode} style={{ marginBottom: '50px' }}>
-          <h1 style={styles.title}>
-            {report.ProgramName} Visibility Program Detail - {report.TimeFrame}
-          </h1>
-          
-          <table style={styles.table}>
-            <thead>
-              <tr style={{ backgroundColor: '#f2f2f2' }}>
-                <th style={styles.thtd}>SaleMan</th>
-                <th style={styles.thtd}>RouteCode</th>
-                <th style={styles.thtd}>SM_Name</th>
-                <th style={styles.thtd}>SuperEcode</th>
-                <th style={styles.thtd}>SuperName</th>
-                <th style={styles.thtd}>CusCode</th>
-                <th style={styles.thtd}>CusName</th>
-                <th style={styles.thtd}>Display Images</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.Details.map((row, index) => (
-                <tr key={index}>
-                  <td style={styles.thtd}>{row.SaleMan}</td>
-                  <td style={styles.thtd}>{row.RouteCode}</td>
-                  <td style={styles.thtd}>{row.SM_Name}</td>
-                  <td style={styles.thtd}>{row.SuperEcode}</td>
-                  <td style={styles.thtd}>{row.SuperName}</td>
-                  <td style={styles.thtd}>{row.CusCode}</td>
-                  <td style={styles.thtd}>{row.CusName}</td>
-                  <td style={styles.thtd}>
-                    <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                      {row.DisplayImages.map((imgUrl, imgIndex) => (
-                        <img 
-                          key={imgIndex} 
-                          src={imgUrl} 
-                          alt="Merchandise" 
-                          height="120" 
-                          width="120"
-                          style={{ border: '1px solid #ddd', borderRadius: '4px' }}
-                        />
-                      ))}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ))}
+        {selectedPeriod && (
+          <h3 style={{ color: '#444', marginTop: 0 }}>
+            Showing {activeTabLabel(selectedPeriod.type)} report: {selectedPeriod.label}
+          </h3>
+        )}
+
+        {loading && <h2 style={{ color: '#666' }}>Generating Reports... Processing image paths and database queries...</h2>}
+        {error && <h2 style={{ color: 'red' }}>Error: {error}</h2>}
+
+        {!loading && !error && selectedPeriod && reports.length === 0 && (
+          <h2>No image folder matches found for {selectedPeriod.label}.</h2>
+        )}
+
+        {/* Report Render Section */}
+        {!loading && reports.map((report) => (
+          <div key={report.ProgramCode} style={{ marginBottom: '50px' }}>
+            <h1 style={styles.title}>
+              {report.ProgramName} Visibility Program Detail - {report.TimeFrame}
+            </h1>
+
+            <div style={styles.tableWrapper}>
+              <table style={styles.table}>
+                <colgroup>
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '38%' }} />
+                </colgroup>
+                <thead>
+                  <tr style={{ backgroundColor: '#f2f2f2' }}>
+                    <th style={styles.thtd}>SaleMan</th>
+                    <th style={styles.thtd}>RouteCode</th>
+                    <th style={styles.thtd}>SM_Name</th>
+                    <th style={styles.thtd}>SuperEcode</th>
+                    <th style={styles.thtd}>SuperName</th>
+                    <th style={styles.thtd}>CusCode</th>
+                    <th style={styles.thtd}>CusName</th>
+                    <th style={styles.thtd}>Display Images</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.Details.map((row, index) => (
+                    <tr key={index}>
+                      <td style={styles.thtd}>{row.SaleMan}</td>
+                      <td style={styles.thtd}>{row.RouteCode}</td>
+                      <td style={styles.thtd}>{row.SM_Name}</td>
+                      <td style={styles.thtd}>{row.SuperEcode}</td>
+                      <td style={styles.thtd}>{row.SuperName}</td>
+                      <td style={styles.thtd}>{row.CusCode}</td>
+                      <td style={styles.thtd}>{row.CusName}</td>
+                      <td style={styles.thtd}>
+                        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                          {row.DisplayImages.map((imgUrl, imgIndex) => (
+                            <img
+                              key={imgIndex}
+                              src={imgUrl}
+                              alt="Merchandise"
+                              height="130"
+                              width="130"
+                              style={{ border: '1px solid #ddd', borderRadius: '4px' }}
+                            />
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
+function activeTabLabel(type) {
+  if (type === 'daily') return 'Daily';
+  if (type === 'weekly') return 'Weekly';
+  if (type === 'monthly') return 'Monthly';
+  return '';
+}
+
 const styles = {
-  controlPanel: {
+  sidebar: {
+    width: '160px',
+    flexShrink: 0,
     backgroundColor: '#f8f9fa',
-    padding: '15px',
-    borderRadius: '6px',
-    marginBottom: '25px',
     border: '1px solid #e9ecef',
+    borderRadius: '6px',
+    padding: '10px',
+    alignSelf: 'flex-start',
+  },
+  tabRow: {
     display: 'flex',
-    alignItems: 'center'
+    flexDirection: 'column',
+    gap: '6px',
+    marginBottom: '12px',
   },
-  dateInput: {
-    padding: '8px',
-    borderRadius: '4px',
+  tabButton: {
+    width: '100%',
+    padding: '8px 6px',
+    fontSize: '13px',
     border: '1px solid #ced4da',
-    fontSize: '14px'
-  },
-  resetButton: {
-    marginLeft: '15px',
-    padding: '8px 12px',
-    backgroundColor: '#6c757d',
-    color: 'white',
-    border: 'none',
     borderRadius: '4px',
-    cursor: 'pointer'
+    backgroundColor: '#fff',
+    cursor: 'pointer',
+  },
+  tabButtonActive: {
+    width: '100%',
+    padding: '8px 6px',
+    fontSize: '13px',
+    border: '1px solid #495057',
+    borderRadius: '4px',
+    backgroundColor: '#495057',
+    color: '#fff',
+    cursor: 'pointer',
+    fontWeight: 'bold',
+  },
+  periodList: {
+    listStyle: 'none',
+    margin: 0,
+    padding: 0,
+    maxHeight: '70vh',
+    overflowY: 'auto',
+  },
+  periodItem: {
+    display: 'block',
+    width: '100%',
+    textAlign: 'left',
+    padding: '8px 8px',
+    marginBottom: '4px',
+    fontSize: '13px',
+    border: '1px solid transparent',
+    borderRadius: '4px',
+    backgroundColor: 'transparent',
+    cursor: 'pointer',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  periodItemActive: {
+    display: 'block',
+    width: '100%',
+    textAlign: 'left',
+    padding: '8px 8px',
+    marginBottom: '4px',
+    fontSize: '13px',
+    border: '1px solid #0d6efd',
+    borderRadius: '4px',
+    backgroundColor: '#e7f1ff',
+    color: '#0d6efd',
+    cursor: 'pointer',
+    fontWeight: 'bold',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   title: {
     fontSize: '22px',
@@ -162,16 +318,22 @@ const styles = {
     paddingBottom: '8px',
     marginBottom: '15px'
   },
+  tableWrapper: {
+    width: '100%',
+  },
   table: {
     width: '100%',
+    tableLayout: 'fixed',
     borderCollapse: 'collapse',
     marginBottom: '20px'
   },
   thtd: {
     border: '1px solid #111',
-    padding: '10px',
+    padding: '10px 8px',
     textAlign: 'left',
-    fontSize: '14px'
+    fontSize: '13px',
+    wordWrap: 'break-word',
+    overflowWrap: 'break-word',
   }
 };
 
