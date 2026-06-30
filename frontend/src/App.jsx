@@ -146,6 +146,123 @@ function App() {
     return report.ProgramCode === selectedProgram;
   });
 
+  // --- HTML DOWNLOAD LOGIC ---
+  const handleDownloadHtml = () => {
+    // Generate inline CSS and HTML structure to make it fully standalone
+    let htmlContent = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Visibility Report - ${selectedPeriod.label}</title>
+        <style>
+          body { font-family: sans-serif; padding: 20px; color: #333; }
+          h1 { font-size: 22px; color: #212529; border-bottom: 2px solid #dee2e6; padding-bottom: 8px; margin-bottom: 15px; }
+          table { width: 100%; table-layout: fixed; border-collapse: collapse; margin-bottom: 50px; }
+          th, td { border: 1px solid #111; padding: 10px 8px; text-align: left; font-size: 13px; word-wrap: break-word; overflow-wrap: break-word; }
+          th { background-color: #f2f2f2; }
+          .img-container { display: flex; gap: 5px; flex-wrap: wrap; }
+          .img-container img { border: 1px solid #ddd; border-radius: 4px; height: 130px; width: 130px; object-fit: cover; }
+          .summary-cell { text-align: center; }
+          .summary-cell hr { border-top: 1px solid #ddd; margin: 8px 0; }
+          .summary-active { font-weight: bold; }
+        </style>
+      </head>
+      <body>
+    `;
+
+    // Append the tables for each filtered report
+    filteredReports.forEach((report) => {
+      htmlContent += `
+        <div>
+          <h1>${report.ProgramName} Visibility Program ${reportType} - ${report.TimeFrame}</h1>
+          <table>
+            <colgroup>
+              <col style="width: 8%" />
+              <col style="width: 8%" />
+              <col style="width: 10%" />
+              <col style="width: 8%" />
+              <col style="width: 10%" />
+              <col style="width: 8%" />
+              <col style="width: 10%" />
+              <col style="width: ${reportType === 'Detail' ? '38%' : '15%'}" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>SaleMan</th>
+                <th>RouteCode</th>
+                <th>SM_Name</th>
+                <th>SuperEcode</th>
+                <th>SuperName</th>
+                <th>CusCode</th>
+                <th>CusName</th>
+                <th>Display Images</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      report.Details.forEach((row) => {
+        let displayContent = '';
+        if (reportType === 'Detail') {
+          displayContent = `<div class="img-container">`;
+          row.DisplayImages.forEach((imgUrl) => {
+            displayContent += `<img src="${imgUrl}" alt="Merchandise" />`;
+          });
+          displayContent += `</div>`;
+        } else {
+          displayContent = `
+            <div class="summary-cell">
+              <div>${report.ProgramName} visibility</div>
+              <hr />
+              <div class="summary-active">${row.Active}</div>
+            </div>
+          `;
+        }
+
+        htmlContent += `
+              <tr>
+                <td>${row.SaleMan}</td>
+                <td>${row.RouteCode}</td>
+                <td>${row.SM_Name}</td>
+                <td>${row.SuperEcode}</td>
+                <td>${row.SuperName}</td>
+                <td>${row.CusCode}</td>
+                <td>${row.CusName}</td>
+                <td>${displayContent}</td>
+              </tr>
+        `;
+      });
+
+      htmlContent += `
+            </tbody>
+          </table>
+        </div>
+      `;
+    });
+
+    htmlContent += `
+      </body>
+      </html>
+    `;
+
+    // Create a Blob from the HTML string and trigger the download
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    // Creates a clean filename like "Report_13_06_2026_Detail.html"
+    const safeLabel = selectedPeriod.label.replace(/[\/\s-]/g, '_');
+    link.download = `Report_${safeLabel}_${reportType}.html`;
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+  // ---------------------------
+
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif', display: 'flex', gap: '16px' }}>
 
@@ -232,6 +349,15 @@ function App() {
                     ))}
                   </select>
                 </div>
+
+                {/* HTML DOWNLOAD BUTTON */}
+                <button 
+                  onClick={handleDownloadHtml} 
+                  style={styles.downloadButton}
+                  disabled={filteredReports.length === 0}
+                >
+                  Download
+                </button>
               </div>
             )}
           </div>
@@ -301,7 +427,7 @@ function App() {
                                 alt="Merchandise"
                                 height="130"
                                 width="130"
-                                style={{ border: '1px solid #ddd', borderRadius: '4px' }}
+                                style={{ border: '1px solid #ddd', borderRadius: '4px', objectFit: 'cover' }}
                               />
                             ))}
                           </div>
@@ -461,6 +587,17 @@ const styles = {
     border: 'none',
     padding: '6px 12px',
     cursor: 'pointer'
+  },
+  downloadButton: {
+    backgroundColor: '#198754',
+    color: 'white',
+    border: 'none',
+    padding: '8px 16px',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontWeight: 'bold',
+    fontSize: '14px',
+    transition: 'background-color 0.2s',
   }
 };
 
