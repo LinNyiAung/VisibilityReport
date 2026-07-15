@@ -29,9 +29,10 @@ const PROGRAM_MAP = {
   "86": "Preserve Fruit",
   "87": "Butter & Spreads",
   "88": "Ice Cream",
-  "89": "May Yee Mon Visibility Program",
-  "90": "Ovaltine Visibility Program",
-  "91": "MYM Congee visibility program"
+  "89": "May Yee Mon",
+  "90": "Ovaltine",
+  "91": "MYM Congee",
+  "92": "Sweety Masala",
 };
 
 function App() {
