@@ -181,15 +181,17 @@ function App() {
             <colgroup>
               <col style="width: 8%" />
               <col style="width: 8%" />
-              <col style="width: 10%" />
               <col style="width: 8%" />
               <col style="width: 10%" />
               <col style="width: 8%" />
               <col style="width: 10%" />
-              <col style="width: ${reportType === 'Detail' ? '38%' : '15%'}" />
+              <col style="width: 8%" />
+              <col style="width: 10%" />
+              <col style="width: ${reportType === 'Detail' ? '30%' : '15%'}" />
             </colgroup>
             <thead>
               <tr>
+                <th>Date</th>
                 <th>SaleMan</th>
                 <th>RouteCode</th>
                 <th>SM_Name</th>
@@ -223,6 +225,7 @@ function App() {
 
         htmlContent += `
               <tr>
+                <td>${row.Date}</td>
                 <td>${row.SaleMan}</td>
                 <td>${row.RouteCode}</td>
                 <td>${row.SM_Name}</td>
@@ -386,15 +389,17 @@ function App() {
                 <colgroup>
                   <col style={{ width: '8%' }} />
                   <col style={{ width: '8%' }} />
-                  <col style={{ width: '10%' }} />
                   <col style={{ width: '8%' }} />
                   <col style={{ width: '10%' }} />
                   <col style={{ width: '8%' }} />
                   <col style={{ width: '10%' }} />
-                  <col style={{ width: reportType === 'Detail' ? '38%' : '15%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: reportType === 'Detail' ? '30%' : '15%' }} />
                 </colgroup>
                 <thead>
                   <tr style={{ backgroundColor: '#f2f2f2' }}>
+                    <th style={styles.thtd}>Date</th>
                     <th style={styles.thtd}>SaleMan</th>
                     <th style={styles.thtd}>RouteCode</th>
                     <th style={styles.thtd}>SM_Name</th>
@@ -408,6 +413,7 @@ function App() {
                 <tbody>
                   {report.Details.map((row, index) => (
                     <tr key={index}>
+                      <td style={styles.thtd}>{row.Date}</td>
                       <td style={styles.thtd}>{row.SaleMan}</td>
                       <td style={styles.thtd}>{row.RouteCode}</td>
                       <td style={styles.thtd}>{row.SM_Name}</td>

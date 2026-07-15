@@ -235,7 +235,7 @@ def scrape_dates_into_raw_data(target_dates: List[str]):
                             # Safely combine the base folder URL with whatever relative path IIS provided
                             img_url = urljoin(folder_url, href)
 
-                            raw_data[program_code][(sp_code, route_code, cus_code)].append(img_url)
+                            raw_data[program_code][(date_str, sp_code, route_code, cus_code)].append(img_url)
 
                 print(f" -> Successfully parsed {valid_images_found} valid image files.")
             else:
@@ -310,7 +310,7 @@ def get_visibility_reports(
     unique_cus_codes = set()
     unique_route_codes = set()
     for prog_data in raw_data.values():
-        for sp, route, cus in prog_data.keys():
+        for date_str, sp, route, cus in prog_data.keys():
             unique_cus_codes.add(cus)
             unique_route_codes.add(route)
 
@@ -352,10 +352,11 @@ def get_visibility_reports(
         program_name = PROGRAM_MAP.get(prog_code, f"Program {prog_code}")
 
         formatted_records = []
-        for (sp_code, route_code, cus_code), images in records.items():
+        for (date_str, sp_code, route_code, cus_code), images in records.items():
             route_info = route_map.get(route_code, {})
 
             formatted_records.append({
+                "Date": date_str,
                 "SaleMan": sp_code,
                 "RouteCode": route_code,
                 "SM_Name": route_info.get("SPName", "Unknown"),
