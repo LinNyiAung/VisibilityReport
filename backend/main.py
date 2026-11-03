@@ -57,6 +57,8 @@ PROGRAM_MAP = {
     "91": "MYM Congee",
     "92": "Sweety Masala",
     "93": "Joy Joy Peanut Butter",
+    "94": "Snack Display Program",
+    "95": " ABBOTT CLP Program"
 }
 
 BASE_IMAGE_URL = "http://sfa.pahtama.com/MerchandiseImage"
