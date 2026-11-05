@@ -1,5 +1,6 @@
 import os
 import re
+import io
 import pyodbc
 import requests
 from urllib.parse import urljoin
@@ -8,9 +9,15 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Tuple
+from PIL import Image as PILImage
+from openpyxl import Workbook
+from openpyxl.drawing.image import Image as XLImage
+from openpyxl.styles import Font, Alignment, PatternFill
+from openpyxl.utils import get_column_letter
 
 load_dotenv()
 
@@ -251,8 +258,7 @@ def scrape_dates_into_raw_data(target_dates: List[str]):
     return raw_data
 
 
-@app.get("/api/reports")
-def get_visibility_reports(
+def build_visibility_reports(
     period_type: str = "weekly",
     date: Optional[str] = None,
     end_date: Optional[str] = None,
@@ -260,6 +266,8 @@ def get_visibility_reports(
     month: Optional[int] = None,
 ):
     """
+    Shared by /api/reports and /api/reports/export-excel.
+
     period_type: "daily" | "weekly" | "monthly"
       - daily:   requires `date` (YYYY-MM-DD)
       - weekly:  requires `end_date` (YYYY-MM-DD, must be a Friday) - falls
@@ -379,7 +387,162 @@ def get_visibility_reports(
             "Details": formatted_records
         })
 
-    return {"reports": reports}
+    return {"reports": reports, "time_frame": time_frame}
+
+
+@app.get("/api/reports")
+def get_visibility_reports(
+    period_type: str = "weekly",
+    date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+):
+    result = build_visibility_reports(period_type, date, end_date, year, month)
+    if "error" in result:
+        return result
+    return {"reports": result["reports"]}
+
+
+def safe_sheet_name(name: str) -> str:
+    cleaned = re.sub(r'[\\/*?:\[\]]', '', name)
+    return cleaned[:31] or "Sheet"
+
+
+def safe_filename_part(label: str) -> str:
+    return re.sub(r'[\/\s-]', '_', label)
+
+
+def fetch_thumbnail(img_url: str, max_size=(110, 110)) -> Optional[Tuple[io.BytesIO, Tuple[int, int]]]:
+    """
+    Downloads and resizes an image, returning a PNG-encoded BytesIO buffer
+    plus its pixel size. openpyxl needs a buffer (not a bare PIL Image) here
+    - a PIL Image that has been through convert()/thumbnail() loses the
+    `.fp` attribute openpyxl's image writer relies on.
+    """
+    try:
+        response = requests.get(img_url, headers=HEADERS, timeout=10)
+        if response.status_code != 200:
+            return None
+        img = PILImage.open(io.BytesIO(response.content))
+        img = img.convert("RGB")
+        img.thumbnail(max_size)
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        buffer.seek(0)
+        return buffer, img.size
+    except Exception as e:
+        print(f" -> Failed to fetch/thumbnail image {img_url}: {e}")
+        return None
+
+
+HEADER_FILL = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
+HEADER_FONT = Font(bold=True)
+COLUMNS = ["Date", "SaleMan", "RouteCode", "SM_Name", "SuperEcode", "SuperName", "CusCode", "CusName"]
+IMAGE_COL_WIDTH = 16
+IMAGE_ROW_HEIGHT = 86
+THUMB_SIZE = (105, 105)
+
+
+def build_report_sheet(wb: Workbook, report: dict, report_type: str):
+    ws = wb.create_sheet(title=safe_sheet_name(report["ProgramName"]))
+
+    details = report["Details"]
+    max_images = 1
+    if report_type == "Detail":
+        max_images = max((len(row.get("DisplayImages", [])) for row in details), default=1) or 1
+
+    # Header row
+    for col_idx, header in enumerate(COLUMNS, start=1):
+        cell = ws.cell(row=1, column=col_idx, value=header)
+        cell.font = HEADER_FONT
+        cell.fill = HEADER_FILL
+
+    first_image_col = len(COLUMNS) + 1
+    last_image_col = first_image_col + max_images - 1
+    ws.cell(row=1, column=first_image_col, value="Display Images").font = HEADER_FONT
+    ws.cell(row=1, column=first_image_col).fill = HEADER_FILL
+    if last_image_col > first_image_col:
+        ws.merge_cells(start_row=1, start_column=first_image_col, end_row=1, end_column=last_image_col)
+
+    for col_idx in range(first_image_col, last_image_col + 1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = IMAGE_COL_WIDTH
+
+    # Data rows
+    for row_idx, row in enumerate(details, start=2):
+        ws.cell(row=row_idx, column=1, value=row["Date"])
+        ws.cell(row=row_idx, column=2, value=row["SaleMan"])
+        ws.cell(row=row_idx, column=3, value=row["RouteCode"])
+        ws.cell(row=row_idx, column=4, value=row["SM_Name"])
+        ws.cell(row=row_idx, column=5, value=row["SuperEcode"])
+        ws.cell(row=row_idx, column=6, value=row["SuperName"])
+        ws.cell(row=row_idx, column=7, value=row["CusCode"])
+        ws.cell(row=row_idx, column=8, value=row["CusName"])
+
+        if report_type == "Detail":
+            ws.row_dimensions[row_idx].height = IMAGE_ROW_HEIGHT
+            for img_idx, img_url in enumerate(row.get("DisplayImages", [])):
+                thumb = fetch_thumbnail(img_url, THUMB_SIZE)
+                if thumb is None:
+                    continue
+                buffer, size = thumb
+                xl_img = XLImage(buffer)
+                xl_img.width, xl_img.height = size
+                col_letter = get_column_letter(first_image_col + img_idx)
+                ws.add_image(xl_img, f"{col_letter}{row_idx}")
+        else:
+            cell = ws.cell(
+                row=row_idx,
+                column=first_image_col,
+                value=f"{report['ProgramName']} visibility\nActive: {row.get('Active', 'N')}",
+            )
+            cell.alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
+            cell.font = Font(bold=True)
+            ws.row_dimensions[row_idx].height = 40
+
+    for col_idx in range(1, len(COLUMNS) + 1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = 16
+
+
+@app.get("/api/reports/export-excel")
+def export_reports_excel(
+    period_type: str = "weekly",
+    date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+    report_type: str = "Detail",
+    program: str = "All",
+):
+    result = build_visibility_reports(period_type, date, end_date, year, month)
+    if "error" in result:
+        return result
+
+    reports = result["reports"]
+    if program != "All":
+        reports = [r for r in reports if r["ProgramCode"] == program]
+
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    if not reports:
+        wb.create_sheet(title="No Data")
+    else:
+        for report in reports:
+            build_report_sheet(wb, report, report_type)
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    safe_label = safe_filename_part(result["time_frame"])
+    filename = f"Report_{safe_label}_{report_type}.xlsx"
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 if __name__ == "__main__":

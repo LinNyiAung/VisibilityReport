@@ -38,6 +38,20 @@ const PROGRAM_MAP = {
   "95": " ABBOTT CLP Program"
 };
 
+function buildPeriodParams(selectedPeriod) {
+  const params = new URLSearchParams();
+  params.set('period_type', selectedPeriod.type);
+  if (selectedPeriod.type === 'daily') {
+    params.set('date', selectedPeriod.date);
+  } else if (selectedPeriod.type === 'weekly') {
+    params.set('end_date', selectedPeriod.end_date);
+  } else if (selectedPeriod.type === 'monthly') {
+    params.set('year', selectedPeriod.year);
+    params.set('month', selectedPeriod.month);
+  }
+  return params;
+}
+
 function App() {
   const [periods, setPeriods] = useState({ daily: [], weekly: [], monthly: [] });
   const [periodsLoading, setPeriodsLoading] = useState(true);
@@ -51,7 +65,8 @@ function App() {
   const [error, setError] = useState(null);
 
   const [selectedProgram, setSelectedProgram] = useState('All');
-  
+  const [excelDownloading, setExcelDownloading] = useState(false);
+
   // State to toggle between Detail and Summary report types
   const [reportType, setReportType] = useState('Detail'); // 'Detail' | 'Summary'
 
@@ -92,16 +107,7 @@ function App() {
     setError(null);
     setSelectedProgram('All'); // Reset filter when changing periods
 
-    const params = new URLSearchParams();
-    params.set('period_type', selectedPeriod.type);
-    if (selectedPeriod.type === 'daily') {
-      params.set('date', selectedPeriod.date);
-    } else if (selectedPeriod.type === 'weekly') {
-      params.set('end_date', selectedPeriod.end_date);
-    } else if (selectedPeriod.type === 'monthly') {
-      params.set('year', selectedPeriod.year);
-      params.set('month', selectedPeriod.month);
-    }
+    const params = buildPeriodParams(selectedPeriod);
 
     fetch(`${API_BASE}/api/reports?${params.toString()}`)
       .then((response) => {
@@ -270,6 +276,39 @@ function App() {
   };
   // ---------------------------
 
+  // --- EXCEL DOWNLOAD LOGIC ---
+  const handleDownloadExcel = () => {
+    const params = buildPeriodParams(selectedPeriod);
+    params.set('report_type', reportType);
+    params.set('program', selectedProgram);
+
+    setExcelDownloading(true);
+    fetch(`${API_BASE}/api/reports/export-excel?${params.toString()}`)
+      .then((response) => {
+        if (!response.ok) throw new Error('Failed to generate the Excel report.');
+        return response.blob();
+      })
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const safeLabel = selectedPeriod.label.replace(/[\/\s-]/g, '_');
+        link.download = `Report_${safeLabel}_${reportType}.xlsx`;
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      })
+      .catch((err) => {
+        setError(err.message);
+      })
+      .finally(() => {
+        setExcelDownloading(false);
+      });
+  };
+  // ---------------------------
+
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif', display: 'flex', gap: '16px' }}>
 
@@ -358,12 +397,21 @@ function App() {
                 </div>
 
                 {/* HTML DOWNLOAD BUTTON */}
-                <button 
-                  onClick={handleDownloadHtml} 
+                <button
+                  onClick={handleDownloadHtml}
                   style={styles.downloadButton}
                   disabled={filteredReports.length === 0}
                 >
                   Download
+                </button>
+
+                {/* EXCEL DOWNLOAD BUTTON */}
+                <button
+                  onClick={handleDownloadExcel}
+                  style={styles.downloadButtonExcel}
+                  disabled={filteredReports.length === 0 || excelDownloading}
+                >
+                  {excelDownloading ? 'Generating...' : 'Download Excel'}
                 </button>
               </div>
             )}
@@ -600,6 +648,17 @@ const styles = {
   },
   downloadButton: {
     backgroundColor: '#198754',
+    color: 'white',
+    border: 'none',
+    padding: '8px 16px',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontWeight: 'bold',
+    fontSize: '14px',
+    transition: 'background-color 0.2s',
+  },
+  downloadButtonExcel: {
+    backgroundColor: '#1d6f42',
     color: 'white',
     border: 'none',
     padding: '8px 16px',
