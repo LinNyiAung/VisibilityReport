@@ -16,8 +16,10 @@ from typing import List, Dict, Optional, Tuple
 from PIL import Image as PILImage
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as XLImage
+from openpyxl.drawing.spreadsheet_drawing import TwoCellAnchor, AnchorMarker
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
+from openpyxl.utils.units import pixels_to_EMU
 
 load_dotenv()
 
@@ -436,6 +438,22 @@ def fetch_thumbnail(img_url: str, max_size=(110, 110)) -> Optional[Tuple[io.Byte
         return None
 
 
+def cell_fill_anchor(row_idx: int, col_idx: int, inset_px: int = 3) -> TwoCellAnchor:
+    """
+    Anchors an image to fill exactly one cell (minus a small inset), set to
+    move AND resize with that cell ("twoCell" editAs - Excel's "Move and
+    size with cells" option). openpyxl's default anchor is fixed-size and
+    only moves with its cell, so resizing a column or row after the file is
+    opened leaves the image the wrong size for its cell, drifting out of
+    alignment. This keeps the image's displayed size tied to the cell's
+    current dimensions instead. row_idx/col_idx are 1-based.
+    """
+    inset = pixels_to_EMU(inset_px)
+    frm = AnchorMarker(col=col_idx - 1, colOff=inset, row=row_idx - 1, rowOff=inset)
+    to = AnchorMarker(col=col_idx, colOff=-inset, row=row_idx, rowOff=-inset)
+    return TwoCellAnchor(editAs="twoCell", _from=frm, to=to)
+
+
 HEADER_FILL = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
 HEADER_FONT = Font(bold=True)
 COLUMNS = ["Date", "SaleMan", "RouteCode", "SM_Name", "SuperEcode", "SuperName", "CusCode", "CusName"]
@@ -485,11 +503,11 @@ def build_report_sheet(wb: Workbook, report: dict, report_type: str):
                 thumb = fetch_thumbnail(img_url, THUMB_SIZE)
                 if thumb is None:
                     continue
-                buffer, size = thumb
+                buffer, _size = thumb
                 xl_img = XLImage(buffer)
-                xl_img.width, xl_img.height = size
-                col_letter = get_column_letter(first_image_col + img_idx)
-                ws.add_image(xl_img, f"{col_letter}{row_idx}")
+                col_num = first_image_col + img_idx
+                xl_img.anchor = cell_fill_anchor(row_idx, col_num)
+                ws.add_image(xl_img)
         else:
             cell = ws.cell(
                 row=row_idx,
